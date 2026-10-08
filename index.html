@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tomato</title>
+<style>
+  :root {
+    --fg: #E1AD01;
+    --bg: #000000;
+    --dim: color-mix(in srgb, var(--fg) 45%, var(--bg));
+    --faint: color-mix(in srgb, var(--fg) 18%, var(--bg));
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-weight: 300;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    transition: background .3s;
+  }
+  button, input, select {
+    font: inherit; color: inherit; background: none; border: none; outline: none;
+  }
+  button { cursor: pointer; }
+  button:focus-visible, input:focus-visible { outline: 1px solid var(--dim); outline-offset: 2px; }
+
+  /* ---- timer ---- */
+  #stage {
+    flex: 1; min-height: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: .6rem; padding: 1rem; text-align: center;
+  }
+  #mode { letter-spacing: .35em; text-transform: uppercase; font-size: .85rem; color: var(--dim); }
+  #time {
+    font-size: clamp(5rem, 22vw, 13rem); line-height: 1; font-weight: 200;
+    font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+  }
+  #task-name {
+    font-size: clamp(1.1rem, 2.6vw, 1.6rem); min-height: 1.6em;
+    max-width: 80vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #task-name.none { color: var(--dim); }
+  #controls { display: flex; gap: 1.5rem; margin-top: 1rem; align-items: center; }
+  .ctl { color: var(--dim); font-size: .85rem; letter-spacing: .2em; text-transform: uppercase; padding: .4rem .2rem; transition: color .2s; }
+  .ctl:hover { color: var(--fg); }
+  #start {
+    border: 1px solid var(--fg); border-radius: 999px; padding: .7rem 2.4rem;
+    color: var(--fg); letter-spacing: .25em; text-transform: uppercase; font-size: .9rem; transition: background .2s, color .2s;
+  }
+  #start:hover { background: var(--fg); color: var(--bg); }
+  #dots { display: flex; gap: .5rem; margin-top: .6rem; }
+  #dots i { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--dim); }
+  #dots i.on { background: var(--fg); border-color: var(--fg); }
+
+  /* ---- settings gear ---- */
+  #gear { position: fixed; top: .8rem; right: .8rem; color: var(--dim); padding: .5rem; font-size: 1.3rem; line-height: 1; opacity: 1; transition: opacity .4s, color .2s; }
+  #gear:hover { color: var(--fg); }
+  body.session #gear { opacity: 0; }
+  body.session #gear:hover, body.session #gear:focus-visible { opacity: 1; }
+
+  /* ---- task panel ---- */
+  #tasks {
+    height: 42vh; width: min(640px, 92vw); margin: 0 auto;
+    display: flex; flex-direction: column;
+    border-top: 1px solid var(--faint);
+    transition: opacity .35s;
+  }
+  body.session #tasks { opacity: 0; }
+  body.session #tasks:hover, body.session #tasks:focus-within { opacity: 1; }
+  #tasks-head { display: flex; align-items: center; gap: .8rem; padding: .8rem .2rem .4rem; }
+  #new-task { flex: 1; padding: .4rem 0; border-bottom: 1px solid var(--faint); }
+  #new-task::placeholder { color: var(--dim); }
+  #new-task:focus { border-bottom-color: var(--dim); }
+  #import-btn { color: var(--dim); font-size: .75rem; letter-spacing: .15em; text-transform: uppercase; white-space: nowrap; }
+  #import-btn:hover { color: var(--fg); }
+  #list { flex: 1; overflow-y: auto; list-style: none; margin: 0; padding: 0 0 1rem; scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
+  .task { display: flex; align-items: center; gap: .6rem; padding: .35rem .2rem; border-radius: 6px; }
+  .task.active { background: var(--faint); }
+  .task input.title { flex: 1; min-width: 0; padding: .25rem 0; text-overflow: ellipsis; }
+  .task.done input.title { text-decoration: line-through; color: var(--dim); }
+  .check {
+    width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--dim); flex: none;
+    display: grid; place-items: center; font-size: 11px; line-height: 1;
+  }
+  .task.done .check { background: var(--dim); color: var(--bg); }
+  .check:hover { border-color: var(--fg); }
+  .pomos { color: var(--dim); font-size: .75rem; font-variant-numeric: tabular-nums; }
+  .play, .del { color: var(--dim); padding: .2rem .4rem; font-size: .95rem; }
+  .play:hover, .del:hover { color: var(--fg); }
+  .del { opacity: 0; transition: opacity .15s; }
+  .task:hover .del, .del:focus-visible { opacity: 1; }
+  .task.active .play { color: var(--fg); }
+  .empty { color: var(--dim); text-align: center; padding: 1.5rem 0; font-size: .9rem; }
+
+  /* ---- dialogs ---- */
+  dialog {
+    background: var(--bg); color: var(--fg); border: 1px solid var(--dim); border-radius: 12px;
+    padding: 1.4rem 1.6rem; width: min(460px, 92vw); max-height: 86vh;
+  }
+  dialog::backdrop { background: rgba(0,0,0,.7); }
+  dialog h2 { margin: 0 0 1rem; font-weight: 300; letter-spacing: .25em; text-transform: uppercase; font-size: .9rem; color: var(--dim); }
+  dialog h3 { margin: 1.4rem 0 .6rem; font-weight: 400; font-size: .75rem; letter-spacing: .2em; text-transform: uppercase; color: var(--dim); }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .35rem 0; }
+  .row input[type=color] { width: 44px; height: 28px; padding: 0; border: 1px solid var(--dim); border-radius: 4px; background: none; cursor: pointer; }
+  .row input[type=number], .field {
+    width: 100%; border-bottom: 1px solid var(--dim); padding: .3rem 0;
+  }
+  .row input[type=number] { width: 4.5rem; text-align: right; }
+  .btn { border: 1px solid var(--dim); border-radius: 999px; padding: .4rem 1.1rem; font-size: .8rem; letter-spacing: .1em; text-transform: uppercase; }
+  .btn:hover { border-color: var(--fg); }
+  .btn.primary { border-color: var(--fg); }
+  .btn.primary:hover { background: var(--fg); color: var(--bg); }
+  .btns { display: flex; gap: .6rem; justify-content: flex-end; margin-top: 1.2rem; flex-wrap: wrap; }
+  .note { color: var(--dim); font-size: .8rem; line-height: 1.5; margin: .4rem 0 .8rem; }
+  .note a { color: var(--fg); }
+  #tt-status { color: var(--dim); font-size: .85rem; min-height: 1.3em; margin: .6rem 0; }
+  #tt-status.err { color: #e5735c; }
+  #tt-projects { display: flex; flex-wrap: wrap; gap: .5rem; margin: .6rem 0; }
+  #tt-projects .btn { padding: .25rem .8rem; }
+  #tt-projects .btn.sel { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  #tt-tasks { list-style: none; margin: 0; padding: 0; max-height: 28vh; overflow-y: auto; }
+  #tt-tasks li { display: flex; gap: .6rem; align-items: center; padding: .3rem 0; font-size: .95rem; }
+  #tt-tasks li.imported { color: var(--dim); }
+  #tt-tasks input { accent-color: var(--fg); }
+  details summary { cursor: pointer; color: var(--dim); font-size: .8rem; letter-spacing: .1em; }
+</style>
+</head>
+<body>
+
+<button id="gear" aria-label="Settings" title="Settings">⚙</button>
+
+<main id="stage">
+  <div id="mode">Focus</div>
+  <div id="time">25:00</div>
+  <div id="task-name" class="none">No task selected</div>
+  <div id="controls">
+    <button class="ctl" id="reset">Reset</button>
+    <button id="start">Start</button>
+    <button class="ctl" id="skip">Skip</button>
+  </div>
+  <div id="dots" aria-label="Pomodoros until long break"></div>
+</main>
+
+<section id="tasks" aria-label="Tasks">
+  <div id="tasks-head">
+    <input id="new-task" type="text" placeholder="Add a task for today…" autocomplete="off">
+    <button id="import-btn">TickTick</button>
+  </div>
+  <ul id="list"></ul>
+</section>
+
+<dialog id="settings">
+  <h2>Settings</h2>
+  <div class="row"><label for="s-fg">Text colour</label><input type="color" id="s-fg"></div>
+  <div class="row"><label for="s-bg">Background colour</label><input type="color" id="s-bg"></div>
+  <h3>Durations (minutes)</h3>
+  <div class="row"><label for="s-work">Focus</label><input type="number" id="s-work" min="1" max="180"></div>
+  <div class="row"><label for="s-short">Short break</label><input type="number" id="s-short" min="1" max="60"></div>
+  <div class="row"><label for="s-long">Long break</label><input type="number" id="s-long" min="1" max="120"></div>
+  <div class="btns">
+    <button class="btn" id="s-reset">Reset colours</button>
+    <button class="btn primary" id="s-close">Done</button>
+  </div>
+</dialog>
+
+<dialog id="ticktick">
+  <h2>Import from TickTick</h2>
+  <p class="note">
+    Paste a TickTick API access token (created via the
+    <a href="https://developer.ticktick.com/" target="_blank" rel="noopener">TickTick developer portal</a>).
+    It is stored only in this browser's local storage.
+  </p>
+  <input class="field" id="tt-token" type="password" placeholder="Access token" autocomplete="off">
+  <div class="btns" style="margin-top:.8rem"><button class="btn primary" id="tt-connect">Load lists</button></div>
+  <div id="tt-status"></div>
+  <div id="tt-projects"></div>
+  <ul id="tt-tasks"></ul>
+  <details style="margin-top:1rem">
+    <summary>Or import a TickTick backup CSV</summary>
+    <p class="note">TickTick → Settings → Account → Generate Backup. Works without any API access.</p>
+    <input type="file" id="tt-csv" accept=".csv,text/csv">
+  </details>
+  <div class="btns">
+    <button class="btn" id="tt-close">Close</button>
+    <button class="btn primary" id="tt-import" disabled>Import selected</button>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const DEFAULTS = { fg: '#E1AD01', bg: '#000000', work: 25, short: 5, long: 15 };
+  const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+  const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+  let settings = { ...DEFAULTS, ...load('tomato.settings', {}) };
+  let tasks = load('tomato.tasks', []);
+  let activeId = load('tomato.active', null);
+  let cycles = 0;                         // completed focus sessions
+  let mode = 'work';                      // work | short | long
+  let remaining = settings.work * 60;     // seconds
+  let running = false, endAt = 0;
+
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const total = () => settings[mode] * 60;
+  const labels = { work: 'Focus', short: 'Short break', long: 'Long break' };
+
+  /* ---------- persistence ---------- */
+  const saveTasks = () => { save('tomato.tasks', tasks); save('tomato.active', activeId); };
+  const saveSettings = () => save('tomato.settings', settings);
+
+  /* ---------- theme ---------- */
+  function applyTheme() {
+    document.documentElement.style.setProperty('--fg', settings.fg);
+    document.documentElement.style.setProperty('--bg', settings.bg);
+  }
+
+  /* ---------- timer ---------- */
+  const fmt = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  const sessionActive = () => mode === 'work' && (running || remaining < total());
+
+  function renderTimer() {
+    const t = fmt(Math.max(0, Math.ceil(remaining)));
+    $('time').textContent = t;
+    $('mode').textContent = labels[mode];
+    $('start').textContent = running ? 'Pause' : (remaining < total() ? 'Resume' : 'Start');
+    document.title = running ? `${t} · ${labels[mode]}` : 'Tomato';
+    document.body.classList.toggle('session', sessionActive());
+    const a = tasks.find(x => x.id === activeId);
+    const name = $('task-name');
+    name.textContent = mode === 'work' ? (a ? a.title : 'No task selected') : 'Rest';
+    name.classList.toggle('none', mode === 'work' && !a);
+    const dots = $('dots');
+    if (dots.children.length !== 4) dots.replaceChildren(...[0, 1, 2, 3].map(() => document.createElement('i')));
+    [...dots.children].forEach((d, i) => d.classList.toggle('on', i < cycles % 4 || (cycles > 0 && cycles % 4 === 0 && mode === 'long')));
+  }
+
+  function tick() {
+    if (!running) return;
+    remaining = (endAt - Date.now()) / 1000;
+    if (remaining <= 0) return finish();
+    renderTimer();
+  }
+
+  function setMode(m) {
+    mode = m; running = false; remaining = total(); renderTimer(); renderTasks();
+  }
+
+  function finish() {
+    beep();
+    if (mode === 'work') {
+      const a = tasks.find(x => x.id === activeId);
+      if (a) { a.pomos = (a.pomos || 0) + 1; saveTasks(); }
+      cycles++;
+      setMode(cycles % 4 === 0 ? 'long' : 'short');
+    } else {
+      setMode('work');
+    }
+    notify(mode === 'work' ? 'Break over — time to focus.' : 'Focus session complete. Take a break.');
+  }
+
+  function start() {
+    if (running) return;
+    running = true; endAt = Date.now() + remaining * 1000;
+    if (window.Notification && Notification.permission === 'default') Notification.requestPermission();
+    renderTimer(); renderTasks();
+  }
+  function pause() { running = false; renderTimer(); }
+
+  $('start').onclick = () => running ? pause() : start();
+  $('reset').onclick = () => { running = false; remaining = total(); renderTimer(); renderTasks(); };
+  $('skip').onclick = () => {
+    if (mode === 'work') { setMode(((cycles + 1) % 4 === 0) ? 'long' : 'short'); cycles++; renderTimer(); }
+    else setMode('work');
+  };
+  setInterval(tick, 250);
+  document.addEventListener('visibilitychange', tick);
+
+  function beep() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [0, .25, .5].forEach(t => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.value = 880; o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(.0001, ctx.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(.25, ctx.currentTime + t + .02);
+        g.gain.exponentialRampToValueAtTime(.0001, ctx.currentTime + t + .2);
+        o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + .22);
+      });
+    } catch {}
+  }
+  function notify(msg) {
+    if (window.Notification && Notification.permission === 'granted' && document.hidden) new Notification('Tomato', { body: msg });
+  }
+
+  /* ---------- tasks ---------- */
+  function el(tag, props = {}, ...kids) {
+    const e = Object.assign(document.createElement(tag), props);
+    kids.forEach(k => e.append(k));
+    return e;
+  }
+
+  function focusTask(id) {
+    activeId = id; saveTasks();
+    if (mode !== 'work') setMode('work');
+    if (!running) start(); else { renderTimer(); renderTasks(); }
+  }
+
+  function addTask(title, extra = {}) {
+    title = title.trim();
+    if (!title) return;
+    tasks.push({ id: uid(), title, done: false, pomos: 0, ...extra });
+  }
+
+  function renderTasks() {
+    const list = $('list');
+    if (!tasks.length) { list.replaceChildren(el('li', { className: 'empty', textContent: 'Nothing planned yet. Add a task above.' })); return; }
+    const ordered = [...tasks.filter(t => !t.done), ...tasks.filter(t => t.done)];
+    list.replaceChildren(...ordered.map(t => {
+      const check = el('button', { className: 'check', title: t.done ? 'Mark not done' : 'Complete', textContent: t.done ? '✓' : '' });
+      check.onclick = () => {
+        t.done = !t.done;
+        if (t.done && t.id === activeId) activeId = null;
+        saveTasks(); renderTimer(); renderTasks();
+      };
+      const title = el('input', { className: 'title', type: 'text', value: t.title, spellcheck: false });
+      title.onchange = () => {
+        const v = title.value.trim();
+        if (!v) { title.value = t.title; return; }
+        t.title = v; saveTasks(); renderTimer();
+      };
+      title.onkeydown = e => { if (e.key === 'Enter') title.blur(); };
+      const kids = [check, title];
+      if (t.pomos) kids.push(el('span', { className: 'pomos', textContent: '🍅'.repeat(Math.min(t.pomos, 4)) + (t.pomos > 4 ? ` ${t.pomos}` : ''), title: `${t.pomos} pomodoro(s)` }));
+      if (!t.done) {
+        const isActive = t.id === activeId;
+        const play = el('button', { className: 'play', title: isActive ? 'Current focus' : 'Focus on this', textContent: isActive && running && mode === 'work' ? '●' : '▶' });
+        play.onclick = () => focusTask(t.id);
+        kids.push(play);
+      }
+      const del = el('button', { className: 'del', title: 'Delete', textContent: '✕' });
+      del.onclick = () => {
+        tasks = tasks.filter(x => x.id !== t.id);
+        if (activeId === t.id) activeId = null;
+        saveTasks(); renderTimer(); renderTasks();
+      };
+      kids.push(del);
+      return el('li', { className: 'task' + (t.id === activeId ? ' active' : '') + (t.done ? ' done' : '') }, ...kids);
+    }));
+  }
+
+  $('new-task').onkeydown = e => {
+    if (e.key !== 'Enter') return;
+    addTask(e.target.value); e.target.value = '';
+    saveTasks(); renderTasks();
+  };
+
+  /* ---------- settings ---------- */
+  const sd = $('settings');
+  $('gear').onclick = () => {
+    $('s-fg').value = settings.fg; $('s-bg').value = settings.bg;
+    ['work', 'short', 'long'].forEach(k => $('s-' + k).value = settings[k]);
+    sd.showModal();
+  };
+  $('s-close').onclick = () => sd.close();
+  $('s-fg').oninput = e => { settings.fg = e.target.value; applyTheme(); saveSettings(); };
+  $('s-bg').oninput = e => { settings.bg = e.target.value; applyTheme(); saveSettings(); };
+  $('s-reset').onclick = () => {
+    settings.fg = DEFAULTS.fg; settings.bg = DEFAULTS.bg; applyTheme(); saveSettings();
+    $('s-fg').value = settings.fg; $('s-bg').value = settings.bg;
+  };
+  ['work', 'short', 'long'].forEach(k => $('s-' + k).onchange = e => {
+    const v = Math.max(1, Math.min(180, parseInt(e.target.value, 10) || DEFAULTS[k]));
+    e.target.value = v; settings[k] = v; saveSettings();
+    if (mode === k && !sessionActive()) { remaining = total(); renderTimer(); }
+  });
+
+  /* ---------- TickTick ---------- */
+  const td = $('ticktick');
+  const API = 'https://api.ticktick.com/open/v1';
+  let ttFound = [];   // [{id,title}]
+  let ttProject = null;
+
+  const ttStatus = (msg, err) => { const s = $('tt-status'); s.textContent = msg; s.classList.toggle('err', !!err); };
+  const imported = id => tasks.some(t => t.tt === id);
+
+  async function ttGet(path) {
+    const token = $('tt-token').value.trim();
+    if (!token) throw new Error('Enter an access token first.');
+    let res;
+    try { res = await fetch(API + path, { headers: { Authorization: 'Bearer ' + token } }); }
+    catch { throw new Error('Request blocked or offline. TickTick may not allow browser requests (CORS) — use the backup CSV option below instead.'); }
+    if (res.status === 401 || res.status === 403) throw new Error('Token rejected by TickTick.');
+    if (!res.ok) throw new Error('TickTick returned ' + res.status + '.');
+    return res.json();
+  }
+
+  function renderFound() {
+    const ul = $('tt-tasks');
+    ul.replaceChildren(...ttFound.map(t => {
+      const done = imported(t.id);
+      const cb = el('input', { type: 'checkbox', checked: !done, disabled: done });
+      cb.dataset.id = t.id;
+      cb.onchange = updateImportBtn;
+      return el('li', { className: done ? 'imported' : '' }, el('label', { style: 'display:flex;gap:.6rem;align-items:center;cursor:pointer;flex:1' }, cb, el('span', { textContent: t.title + (done ? ' (imported)' : '') })));
+    }));
+    updateImportBtn();
+  }
+  function updateImportBtn() {
+    $('tt-import').disabled = !$('tt-tasks').querySelector('input:checked:not(:disabled)');
+  }
+
+  async function loadProjects() {
+    ttStatus('Loading lists…');
+    try {
+      const projects = await ttGet('/project');
+      save('tomato.ttToken', $('tt-token').value.trim());
+      const box = $('tt-projects');
+      box.replaceChildren(...[{ id: 'inbox', name: 'Inbox' }, ...projects].map(p => {
+        const b = el('button', { className: 'btn', textContent: p.name });
+        b.onclick = () => { [...box.children].forEach(c => c.classList.remove('sel')); b.classList.add('sel'); loadProject(p); };
+        return b;
+      }));
+      ttStatus(`${projects.length} list(s). Pick one to browse.`);
+    } catch (e) { ttStatus(e.message, true); }
+  }
+
+  async function loadProject(p) {
+    ttProject = p; ttStatus(`Loading “${p.name}”…`);
+    try {
+      const data = await ttGet('/project/' + encodeURIComponent(p.id) + '/data');
+      ttFound = (data.tasks || []).filter(t => !t.status).map(t => ({ id: t.id, title: t.title }));
+      ttStatus(ttFound.length ? `${ttFound.length} open task(s) in “${p.name}”.` : `No open tasks in “${p.name}”.`);
+      renderFound();
+    } catch (e) { ttFound = []; renderFound(); ttStatus(e.message, true); }
+  }
+
+  // minimal RFC4180 CSV parser
+  function parseCSV(text) {
+    const rows = []; let row = [], f = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) {
+        if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c;
+      } else if (c === '"') q = true;
+      else if (c === ',') { row.push(f); f = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(f); rows.push(row); row = []; f = ''; }
+      else f += c;
+    }
+    if (f || row.length) { row.push(f); rows.push(row); }
+    return rows;
+  }
+
+  $('tt-csv').onchange = async e => {
+    const file = e.target.files[0]; if (!file) return;
+    const rows = parseCSV(await file.text());
+    const h = rows.findIndex(r => r.includes('Title'));
+    if (h < 0) { ttStatus('That doesn’t look like a TickTick backup CSV.', true); return; }
+    const ti = rows[h].indexOf('Title'), si = rows[h].indexOf('Status'), li = rows[h].indexOf('List Name');
+    ttFound = rows.slice(h + 1)
+      .filter(r => r[ti] && (si < 0 || r[si] === '0'))
+      .map(r => ({ id: 'csv:' + (li >= 0 ? r[li] : '') + ':' + r[ti], title: r[ti] }));
+    ttStatus(`${ttFound.length} open task(s) found in file.`);
+    renderFound();
+  };
+
+  $('import-btn').onclick = () => {
+    $('tt-token').value = load('tomato.ttToken', '');
+    td.showModal();
+  };
+  $('tt-connect').onclick = loadProjects;
+  $('tt-close').onclick = () => td.close();
+  $('tt-import').onclick = () => {
+    const ids = new Set([...$('tt-tasks').querySelectorAll('input:checked:not(:disabled)')].map(i => i.dataset.id));
+    ttFound.filter(t => ids.has(t.id)).forEach(t => addTask(t.title, { tt: t.id }));
+    saveTasks(); renderTasks(); renderFound();
+    ttStatus(`Imported ${ids.size} task(s).`);
+  };
+
+  /* ---------- keyboard ---------- */
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space' && !/INPUT|BUTTON|SELECT/.test(document.activeElement.tagName) && !document.querySelector('dialog[open]')) {
+      e.preventDefault(); running ? pause() : start();
+    }
+  });
+
+  /* ---------- boot ---------- */
+  if (activeId && !tasks.some(t => t.id === activeId && !t.done)) activeId = null;
+  applyTheme(); renderTimer(); renderTasks();
+})();
+</script>
+</body>
+</html>
