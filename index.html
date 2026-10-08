@@ -17,7 +17,7 @@
     background: var(--bg);
     color: var(--fg);
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-    font-weight: 300;
+    font-weight: 400;
     display: flex; flex-direction: column;
     overflow: hidden;
     transition: background .3s;
@@ -34,9 +34,9 @@
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: .6rem; padding: 1rem; text-align: center;
   }
-  #mode { letter-spacing: .35em; text-transform: uppercase; font-size: .85rem; color: var(--dim); }
+  #mode { letter-spacing: .35em; text-transform: uppercase; font-size: .85rem; font-weight: 500; color: var(--dim); }
   #time {
-    font-size: clamp(5rem, 22vw, 13rem); line-height: 1; font-weight: 200;
+    font-size: clamp(5rem, 22vw, 13rem); line-height: 1; font-weight: 400;
     font-variant-numeric: tabular-nums; letter-spacing: -.02em;
   }
   #task-name {
@@ -102,7 +102,7 @@
     padding: 1.4rem 1.6rem; width: min(460px, 92vw); max-height: 86vh;
   }
   dialog::backdrop { background: rgba(0,0,0,.7); }
-  dialog h2 { margin: 0 0 1rem; font-weight: 300; letter-spacing: .25em; text-transform: uppercase; font-size: .9rem; color: var(--dim); }
+  dialog h2 { margin: 0 0 1rem; font-weight: 400; letter-spacing: .25em; text-transform: uppercase; font-size: .9rem; color: var(--dim); }
   dialog h3 { margin: 1.4rem 0 .6rem; font-weight: 400; font-size: .75rem; letter-spacing: .2em; text-transform: uppercase; color: var(--dim); }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .35rem 0; }
   .row input[type=color] { width: 44px; height: 28px; padding: 0; border: 1px solid var(--dim); border-radius: 4px; background: none; cursor: pointer; }
@@ -406,7 +406,7 @@
       const cb = el('input', { type: 'checkbox', checked: !done, disabled: done });
       cb.dataset.id = t.id;
       cb.onchange = updateImportBtn;
-      return el('li', { className: done ? 'imported' : '' }, el('label', { style: 'display:flex;gap:.6rem;align-items:center;cursor:pointer;flex:1' }, cb, el('span', { textContent: t.title + (done ? ' (imported)' : '') })));
+      return el('li', { className: done ? 'imported' : '' }, el('label', { style: 'display:flex;gap:.6rem;align-items:center;cursor:pointer;flex:1' }, cb, el('span', { textContent: t.title + (done ? ' (already imported)' : '') })));
     }));
     updateImportBtn();
   }
